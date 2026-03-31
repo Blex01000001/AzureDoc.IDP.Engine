@@ -14,7 +14,7 @@ namespace AzureDoc.IDP.Engine.Helpers
         public List<ValveDimensionData> Parse(AnalyzeResult result, string fileName, int pageIndex)
         {
             //PrintWords(result);
-            SaveAnalysisToTxt(result, "log/" + fileName + ".pdf");
+            //SaveAnalysisToTxt(result, "log/" + fileName + ".pdf");
             var list = new List<ValveDimensionData>();
             foreach (var table in result.Tables)
             {

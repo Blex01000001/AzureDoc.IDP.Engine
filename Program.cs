@@ -1,4 +1,5 @@
-﻿using AzureDoc.IDP.Engine.Services;
+﻿using AzureDoc.IDP.Engine.Configurations;
+using AzureDoc.IDP.Engine.Services;
 
 namespace GoogleAIStudioProject
 {
@@ -6,25 +7,19 @@ namespace GoogleAIStudioProject
     {
         static async Task Main(string[] args)
         {
-            Console.WriteLine(">>>>START<<<<");
+            Console.WriteLine(">>>>Doc Intelligence Service START<<<<");
+            //string filePath = @"C:\Users\01101006\Downloads\TEST\ALL.pdf";
+            string filePath = @"H:\PDFs\M106.pdf";
+
+            IDocumentIntelligenceService docIntelligenceService = new DocumentIntelligenceService(ConfigLoader.LoadSettings());
+            var ProcessingSummary = await docIntelligenceService.AnalyzeInSequentialAsync(filePath);
 
 
-            var service = new PdfTableConversionService();
-
-
-            var finalResult = await service.ExecuteAsync(@"C:\Users\01101006\Downloads\TEST\ALL.pdf");
             Console.WriteLine($"page\tNPD\tTag No.\tItem\tL\tMinConfidence");
-            foreach (var item in finalResult)
+            foreach (var item in ProcessingSummary.Data)
             {
                 Console.WriteLine($"{item.PageIndex}\t{item.Size}\t{item.TagNo}\t{item.Item}\t{item.L}\t{item.MinConfidence}");
             }
-
-
-
-            //var fullText = await service.ReadAllTextAsync(@"H:\PDFs\32.pdf");
-            //Console.WriteLine("--- PDF 文字提取結果 ---");
-            //Console.WriteLine(fullText);
-
 
             Console.ReadKey();
         }
