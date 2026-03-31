@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace AzureDoc.IDP.Engine.Models
+namespace AzureDoc.IDP.Engine.Configurations
 {
     public class AzureSettings
     {

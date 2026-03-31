@@ -1,4 +1,6 @@
-﻿namespace GoogleAIStudioProject
+﻿using AzureDoc.IDP.Engine.Services;
+
+namespace GoogleAIStudioProject
 {
     internal class Program
     {
@@ -10,7 +12,7 @@
             var service = new PdfTableConversionService();
 
 
-            var finalResult = await service.ExecuteAsync(@"C:\Users\01101006\Downloads\TEST\2.pdf");
+            var finalResult = await service.ExecuteAsync(@"C:\Users\01101006\Downloads\TEST\test.pdf");
             Console.WriteLine($"page\tNPD\tTag No.\tItem\tL\tMinConfidence");
             foreach (var item in finalResult)
             {
