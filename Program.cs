@@ -12,7 +12,7 @@ namespace GoogleAIStudioProject
             var service = new PdfTableConversionService();
 
 
-            var finalResult = await service.ExecuteAsync(@"C:\Users\01101006\Downloads\TEST\test.pdf");
+            var finalResult = await service.ExecuteAsync(@"C:\Users\01101006\Downloads\TEST\ALL.pdf");
             Console.WriteLine($"page\tNPD\tTag No.\tItem\tL\tMinConfidence");
             foreach (var item in finalResult)
             {

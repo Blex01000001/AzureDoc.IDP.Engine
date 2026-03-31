@@ -14,6 +14,7 @@ namespace AzureDoc.IDP.Engine.Helpers
         public List<ValveDimensionData> Parse(AnalyzeResult result, string fileName, int pageIndex)
         {
             //PrintWords(result);
+            SaveAnalysisToTxt(result, "log/" + fileName + ".pdf");
             var list = new List<ValveDimensionData>();
             foreach (var table in result.Tables)
             {
@@ -62,7 +63,14 @@ namespace AzureDoc.IDP.Engine.Helpers
 
         private float GetConfidence(AnalyzeResult result, DocumentTableCell cell)
         {
-            return result.Pages[0].Words.First(x => x.Content == cell.Content && x.Span.Index == cell.Spans[0].Index).Confidence;
+            var word = result.Pages[0].Words.FirstOrDefault(x => x.Content == cell.Content && x.Span.Index == cell.Spans[0].Index);
+            if (word == null)
+            {
+                // 這裡可以下中斷點，觀察 cell.Content 到底長什麼樣子
+                Console.WriteLine($"[Debug] 找不到對應單字: {cell.Content}");
+                return 0f;
+            }
+            return word.Confidence;
         }
 
         private void PrintWords(AnalyzeResult result)
@@ -75,9 +83,48 @@ namespace AzureDoc.IDP.Engine.Helpers
                 Console.WriteLine($"{i}\t{word.Confidence}\t{word.Content}\t{word.Span.Index}");
             }
             Console.WriteLine("===============================================================\n");
-
         }
 
+        private void SaveAnalysisToTxt(AnalyzeResult result, string pdfFilePath)
+        {
+            // 1. 產生對應的 TXT 檔名 (例如 48.pdf -> 48.txt)
+            string txtPath = Path.ChangeExtension(pdfFilePath, ".txt");
+
+            using (StreamWriter writer = new StreamWriter(txtPath, false, Encoding.UTF8))
+            {
+                writer.WriteLine($"文件分析報告: {Path.GetFileName(pdfFilePath)}");
+                writer.WriteLine($"生成時間: {DateTime.Now}");
+                writer.WriteLine("===============================================================");
+
+                foreach (var page in result.Pages)
+                {
+                    writer.WriteLine($"\n【 第 {page.PageNumber} 頁 】");
+
+                    // --- 區段一：印出 Lines (整行內容，適合人類閱讀) ---
+                    writer.WriteLine("\n[Lines 概覽]");
+                    foreach (var line in page.Lines)
+                    {
+                        writer.WriteLine(line.Content);
+                    }
+
+                    // --- 區段二：印出 Words 細節 (包含信心分數與 Span，適合除錯) ---
+                    writer.WriteLine("\n[Words 詳細數據]");
+                    writer.WriteLine("Index\tConfidence\tContent\t\tOffset\tLength");
+                    writer.WriteLine("---------------------------------------------------------------");
+
+                    for (int i = 0; i < page.Words.Count; i++)
+                    {
+                        var word = page.Words[i];
+                        // 使用 :F4 限制信心分數到小數點後四位，排版較整齊
+                        writer.WriteLine($"{i}\t{word.Confidence:F4}\t\t{word.Content}\t\t{word.Span.Index}\t{word.Span.Length}");
+                    }
+
+                    writer.WriteLine("---------------------------------------------------------------");
+                }
+            }
+
+            //Console.WriteLine($"[系統] 分析結果已存至: {txtPath}");
+        }
         //public List<ValveDimensionData> Parse(AnalyzeResult result, string fileName, int pageIndex)
         //{
         //    var list = new List<ValveDimensionData>();
