@@ -8,18 +8,35 @@ using PdfSharp.Pdf;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Threading.RateLimiting;
+
 
 namespace AzureDoc.IDP.Engine.Services
 {
     public class DocumentIntelligenceService : IDocumentIntelligenceService
     {
-        private readonly DocumentAnalysisClient _client;
-        private readonly ValveTableParser _parser;
-        private readonly AzureSettings _settings;
-        private readonly string outputFolderName = $"Operation_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
-        private ProcessingSummary _summary = new ProcessingSummary();
         private string _targetFolder;
-
+        private readonly AzureSettings _settings;
+        private readonly ValveTableParser _parser;
+        private readonly DocumentAnalysisClient _client;
+        private ProcessingSummary _summary = new ProcessingSummary();
+        private readonly string outputFolderName = $"Operation_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
+        private readonly TokenBucketRateLimiter _freeLimiter = new(new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = 4, // 桶子容量，允許極小規模的突發
+            ReplenishmentPeriod = TimeSpan.FromSeconds(4), // 每 4 秒補一次
+            TokensPerPeriod = 1,
+            AutoReplenishment = true,
+            QueueLimit = 100
+        });
+        private readonly TokenBucketRateLimiter _payLimiter = new(new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = 1,
+            ReplenishmentPeriod = TimeSpan.FromMilliseconds(80),
+            TokensPerPeriod = 1,
+            AutoReplenishment = true,
+            QueueLimit = 100
+        });
         public DocumentIntelligenceService(AzureSettings settings)
         {
             _settings = settings;
@@ -38,6 +55,67 @@ namespace AzureDoc.IDP.Engine.Services
         /// <param name="maxDegreeOfParallelism">最大並行數</param>
         /// <returns></returns>
         public async Task<ProcessingSummary> AnalyzeInParallelAsync(string filePath, int maxDegreeOfParallelism = 10)
+        {
+            _summary.FileName = Path.GetFileName(filePath);
+            _summary.FilePath = filePath;
+            var sw = Stopwatch.StartNew();
+            var allResults = new ConcurrentBag<ValveDimensionData>();
+            var analyzeResults = new ConcurrentBag<AnalyzeResult>();
+            string fileNameOnly = Path.GetFileNameWithoutExtension(filePath);
+
+            using var inputDocument = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+            int totalPages = inputDocument.PageCount;
+            _summary.TotalPages = totalPages;
+
+            using var semaphore = new SemaphoreSlim(maxDegreeOfParallelism);// 控制併發任務數
+            var tasks = new List<Task>();
+
+            for (int i = 0; i < totalPages; i++)
+            {
+                int pageNumber = i + 1;
+                await semaphore.WaitAsync();// 步驟 A: 先過 Semaphore (確保執行緒/連線數受控)
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        // 步驟 B: 再過 TokenBucket (確保每秒請求數受控)
+                        using var lease = await _payLimiter.AcquireAsync(1);
+                        if (!lease.IsAcquired) return;
+
+                        Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [發送] 頁面 {pageNumber}");
+
+                        // 1. 準備單頁 Stream
+                        using var ms = PrepareSinglePageStream(filePath, pageNumber - 1);
+
+                        // 2. 呼叫 Azure API
+                        var operation = await _client.AnalyzeDocumentAsync(WaitUntil.Completed, "prebuilt-layout", ms);
+                        analyzeResults.Add(operation.Value);
+                        // 3. 解析
+                        var pageData = _parser.Parse(operation.Value, fileNameOnly, pageNumber);
+                        foreach (var item in pageData) allResults.Add(item);
+
+                        Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [完成] 頁面 {pageNumber}");
+                        ExportPageLogs(fileNameOnly, pageNumber, operation.Value.Pages[0]);
+                    }
+                    catch (Exception ex)
+                    {
+                        _summary.IsSuccess = false;
+                        _summary.ErrorMessage = ex.Message;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }));
+            }
+            await Task.WhenAll(tasks);
+            sw.Stop();
+            _summary.EndTime = DateTime.Now;
+            _summary.Data = allResults.OrderBy(x => x.PageIndex).ToList();
+            ExportOperationLogs(analyzeResults.ToList());
+            return _summary;
+        }
+        public async Task<ProcessingSummary> AnalyzeInParallelAsync_OLD(string filePath, int maxDegreeOfParallelism = 10)
         {
             var summary = new ProcessingSummary
             {
@@ -112,6 +190,51 @@ namespace AzureDoc.IDP.Engine.Services
 
             using var inputDocument = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
             _summary.TotalPages = inputDocument.PageCount;
+
+            for (int i = 0; i < inputDocument.PageCount; i++)
+            {
+                int pageNumber = i + 1;
+                using var lease = await _freeLimiter.AcquireAsync(permitCount: 1);
+                if (!lease.IsAcquired)
+                {
+                    // 通常只有在 QueueLimit 滿了才會走到這
+                    Console.WriteLine($"[警告] 無法取得執行許可，略過第 {pageNumber} 頁");
+                    continue;
+                }
+                Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [處理中] {fileNameOnly} - 第 {pageNumber} 頁");
+                using var singlePagePdf = new PdfDocument();
+                singlePagePdf.AddPage(inputDocument.Pages[i]);
+                using var ms = new MemoryStream();
+                singlePagePdf.Save(ms, false);
+                ms.Position = 0;
+
+                // 呼叫 Azure
+                var operation = await _client.AnalyzeDocumentAsync(WaitUntil.Completed, "prebuilt-layout", ms);
+                analyzeResults.Add(operation.Value);
+
+                // 解析資料
+                var pageData = _parser.Parse(operation.Value, fileNameOnly, pageNumber);
+                allResults.AddRange(pageData);
+
+                ExportPageLogs(fileNameOnly, pageNumber, operation.Value.Pages[0]);
+            }
+            sw.Stop();
+            _summary.EndTime = DateTime.Now;
+            _summary.Data = allResults;
+            ExportOperationLogs(analyzeResults);
+            return _summary;
+        }
+        public async Task<ProcessingSummary> AnalyzeInSequentialAsync_OLD(string filePath)
+        {
+            _summary.FileName = Path.GetFileName(filePath);
+            _summary.FilePath = filePath;
+            var sw = Stopwatch.StartNew();
+            var allResults = new List<ValveDimensionData>();
+            var analyzeResults = new List<AnalyzeResult>();
+            string fileNameOnly = Path.GetFileNameWithoutExtension(filePath);
+
+            using var inputDocument = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+            _summary.TotalPages = inputDocument.PageCount;
             for (int i = 0; i < inputDocument.PageCount; i++)
             {
                 int pageNumber = i + 1;
@@ -131,7 +254,7 @@ namespace AzureDoc.IDP.Engine.Services
                 var pageData = _parser.Parse(operation.Value, fileNameOnly, pageNumber);
                 allResults.AddRange(pageData);
 
-                ExportLogs(fileNameOnly, i + 1, operation.Value.Pages[0]);
+                ExportPageLogs(fileNameOnly, i + 1, operation.Value.Pages[0]);
                 // 免費版頻率限制處理
                 if (i < inputDocument.PageCount - 1)
                 {
@@ -176,9 +299,9 @@ namespace AzureDoc.IDP.Engine.Services
                 string summaryPath = Path.Combine(_targetFolder, $"{baseFileName}-Summary.txt");
                 using (var writer = new StreamWriter(summaryPath, false, Encoding.UTF8))
                 {
-                    writer.WriteLine("--------------------------------");
-                    writer.WriteLine("        Processing Summary      ");
-                    writer.WriteLine("--------------------------------");
+                    writer.WriteLine("==========================================================");
+                    writer.WriteLine("                     Processing Summary                   ");
+                    writer.WriteLine("==========================================================");
                     writer.WriteLine($"Operation ID    : {_summary.OperationId}");
                     writer.WriteLine($"File Name       : {_summary.FileName}");
                     writer.WriteLine($"Total Pages     : {_summary.TotalPages}");
@@ -187,7 +310,7 @@ namespace AzureDoc.IDP.Engine.Services
                     writer.WriteLine($"Elapsed Time    : {_summary.TotalDuration.TotalSeconds:F2} s");
                     writer.WriteLine($"Avg per Page    : {_summary.AveragePageTimeMs:F0} ms");
                     writer.WriteLine($"Success         : {_summary.IsSuccess}");
-                    writer.WriteLine("================================");
+                    writer.WriteLine("==========================================================");
                     writer.WriteLine("\n=== Extracted Data (CSV Format) ===");
                     writer.WriteLine("page,Size,Item,TagNo,L,Confidence");
                     foreach (var item in _summary.Data)
@@ -203,7 +326,7 @@ namespace AzureDoc.IDP.Engine.Services
                 Console.WriteLine($"[警告] 無法生成日誌檔案: {ex.Message}");
             }
         }
-        private void ExportLogs(string FileName, int pNum, DocumentPage page)
+        private void ExportPageLogs(string FileName, int pNum, DocumentPage page)
         {   
             string baseFileName = Path.GetFileNameWithoutExtension(FileName);
 

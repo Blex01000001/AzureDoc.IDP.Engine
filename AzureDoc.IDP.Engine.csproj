@@ -11,6 +11,7 @@
     <PackageReference Include="Azure.AI.FormRecognizer" Version="4.1.0" />
     <PackageReference Include="Mscc.GenerativeAI" Version="3.1.0" />
     <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <PackageReference Include="System.Threading.RateLimiting" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>

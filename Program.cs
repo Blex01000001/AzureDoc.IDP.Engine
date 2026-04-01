@@ -12,7 +12,7 @@ namespace GoogleAIStudioProject
             string filePath = @"H:\PDFs\M106.pdf";
 
             IDocumentIntelligenceService docIntelligenceService = new DocumentIntelligenceService(ConfigLoader.LoadSettings());
-            var ProcessingSummary = await docIntelligenceService.AnalyzeInSequentialAsync(filePath);
+            var ProcessingSummary = await docIntelligenceService.AnalyzeInParallelAsync(filePath);
 
 
             Console.WriteLine($"page\tNPD\tTag No.\tItem\tL\tMinConfidence");
