@@ -82,7 +82,7 @@ namespace AzureDoc.IDP.Engine.Services
                         using var lease = await _payLimiter.AcquireAsync(1);
                         if (!lease.IsAcquired) return;
 
-                        Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [發送] 頁面 {pageNumber}");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [發送] 頁面 {pageNumber}");
 
                         // 1. 準備單頁 Stream
                         using var ms = PrepareSinglePageStream(filePath, pageNumber - 1);
@@ -94,7 +94,7 @@ namespace AzureDoc.IDP.Engine.Services
                         var pageData = _parser.Parse(operation.Value, fileNameOnly, pageNumber);
                         foreach (var item in pageData) allResults.Add(item);
 
-                        Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [完成] 頁面 {pageNumber}");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [完成] 頁面 {pageNumber}");
                         ExportPageLogs(fileNameOnly, pageNumber, operation.Value.Pages[0]);
                     }
                     catch (Exception ex)
@@ -201,7 +201,7 @@ namespace AzureDoc.IDP.Engine.Services
                     Console.WriteLine($"[警告] 無法取得執行許可，略過第 {pageNumber} 頁");
                     continue;
                 }
-                Console.WriteLine($"[{DateTime.Now:YYYY-MM-dd HH:mm:ss.fff}] [處理中] {fileNameOnly} - 第 {pageNumber} 頁");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [處理中] {fileNameOnly} - 第 {pageNumber} 頁");
                 using var singlePagePdf = new PdfDocument();
                 singlePagePdf.AddPage(inputDocument.Pages[i]);
                 using var ms = new MemoryStream();
