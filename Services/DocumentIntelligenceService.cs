@@ -15,6 +15,8 @@ namespace AzureDoc.IDP.Engine.Services
 {
     public class DocumentIntelligenceService : IDocumentIntelligenceService
     {
+        private readonly string _endpoint;
+        private readonly string _apiKey;
         private string _targetFolder;
         private readonly AzureSettings _settings;
         private readonly ValveTableParser _parser;
@@ -37,10 +39,11 @@ namespace AzureDoc.IDP.Engine.Services
             AutoReplenishment = true,
             QueueLimit = 100
         });
-        public DocumentIntelligenceService(AzureSettings settings)
+        public DocumentIntelligenceService(string endpoint, string apiKey)
         {
-            _settings = settings;
-            _client = new DocumentAnalysisClient(new Uri(settings.Endpoint), new AzureKeyCredential(settings.ApiKey));
+            _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
+            _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+            _client = new DocumentAnalysisClient(new Uri(_endpoint), new AzureKeyCredential(_apiKey));
             _parser = new ValveTableParser();
             _summary.StartTime = DateTime.Now;
             string rootTempPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");

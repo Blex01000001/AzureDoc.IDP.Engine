@@ -11,7 +11,8 @@ namespace GoogleAIStudioProject
             //string filePath = @"C:\Users\01101006\Downloads\TEST\ALL.pdf";
             string filePath = @"H:\PDFs\M106.pdf";
 
-            IDocumentIntelligenceService docIntelligenceService = new DocumentIntelligenceService(ConfigLoader.LoadSettings());
+            AzureSettings azureSettings = ConfigLoader.LoadSettings();
+            IDocumentIntelligenceService docIntelligenceService = new DocumentIntelligenceService(azureSettings.Endpoint, azureSettings.ApiKey);
             var ProcessingSummary = await docIntelligenceService.AnalyzeInParallelAsync(filePath);
 
 
