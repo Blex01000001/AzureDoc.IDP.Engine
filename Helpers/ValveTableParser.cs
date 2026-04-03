@@ -11,7 +11,7 @@ namespace AzureDoc.IDP.Engine.Helpers
     public class ValveTableParser
     {
 
-        public List<ValveDimensionData> Parse(AnalyzeResult result, string fileName, int pageIndex)
+        public static List<ValveDimensionData> Parse(AnalyzeResult result, string fileName, int pageIndex)
         {
             //PrintWords(result);
             //SaveAnalysisToTxt(result, "log/" + fileName + ".pdf");
@@ -61,7 +61,7 @@ namespace AzureDoc.IDP.Engine.Helpers
         }
 
 
-        private float GetConfidence(AnalyzeResult result, DocumentTableCell cell)
+        private static float GetConfidence(AnalyzeResult result, DocumentTableCell cell)
         {
             var word = result.Pages[0].Words.FirstOrDefault(x => x.Content == cell.Content && x.Span.Index == cell.Spans[0].Index);
             if (word == null)
@@ -158,7 +158,7 @@ namespace AzureDoc.IDP.Engine.Helpers
         //    }
         //    return list;
         //}
-        public string CleanValue(string input) => input?.Replace("|", "").Trim() ?? "";
+        public static string CleanValue(string input) => input?.Replace("|", "").Trim() ?? "";
 
     }
 }

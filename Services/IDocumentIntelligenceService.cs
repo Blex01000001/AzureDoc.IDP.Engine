@@ -1,4 +1,5 @@
-﻿using AzureDoc.IDP.Engine.Models;
+﻿using Azure.AI.FormRecognizer.DocumentAnalysis;
+using AzureDoc.IDP.Engine.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,8 +10,8 @@ namespace AzureDoc.IDP.Engine.Services
 {
     public interface IDocumentIntelligenceService
     {
-        public Task<ProcessingSummary> AnalyzeInParallelAsync(string filePath, int maxDegreeOfParallelism = 10);
-        public Task<ProcessingSummary> AnalyzeInSequentialAsync(string filePath);
+        public Task<DocumentResponse> AnalyzeInParallelAsync(string filePath, int maxDegreeOfParallelism = 10);
+        //public Task<DocumentResponse> AnalyzeInSequentialAsync(string filePath);
 
     }
 }
